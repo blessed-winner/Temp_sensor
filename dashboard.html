@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Temperature monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #11151a;
+    --panel: #1b2026;
+    --border: #2a3038;
+    --ink: #ece8e2;
+    --muted: #80868f;
+    --normal: #2fbf9f;
+    --alert: #e8543b;
+    --accent: var(--normal);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'IBM Plex Sans', sans-serif;
+    color: var(--ink);
+  }
+
+  main {
+    width: 100%;
+    max-width: 420px;
+    margin: 24px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+
+  .stripe {
+    height: 3px;
+    background: var(--accent);
+    transition: background-color 0.4s ease;
+  }
+
+  .statusbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+
+  .status-left { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+  }
+
+  .dot.on {
+    background: var(--normal);
+    box-shadow: 0 0 0 0 rgba(47, 191, 159, 0.6);
+    animation: pulse 2s infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dot.on { animation: none; }
+  }
+
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(47, 191, 159, 0.5); }
+    70%  { box-shadow: 0 0 0 6px rgba(47, 191, 159, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(47, 191, 159, 0); }
+  }
+
+  .clock {
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+  }
+
+  .reading {
+    text-align: center;
+    padding: 36px 20px 28px;
+  }
+
+  .reading .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .candidate {
+    font-size: 18px;
+    font-weight: 500;
+    margin-bottom: 18px;
+    padding: 0 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .temp {
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 500;
+    font-size: clamp(52px, 17vw, 88px);
+    line-height: 1;
+    color: var(--accent);
+    transition: color 0.4s ease;
+  }
+
+  .temp .unit {
+    font-size: 0.42em;
+    opacity: 0.75;
+    margin-left: 2px;
+  }
+
+  .meta {
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .log {
+    border-top: 1px solid var(--border);
+    padding: 16px 20px 18px;
+  }
+
+  .log-header {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  ul#logList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  ul#logList li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+
+  ul#logList li:last-child { border-bottom: none; }
+
+  .row-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--normal);
+    flex-shrink: 0;
+  }
+
+  .row-dot.alert { background: var(--alert); }
+
+  .row-name {
+    flex: 1;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .row-temp {
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--ink);
+  }
+
+  .row-time {
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--muted);
+    font-size: 12px;
+    min-width: 60px;
+    text-align: right;
+  }
+
+  .empty {
+    color: var(--muted);
+    font-size: 13px;
+    padding: 4px 0;
+  }
+</style>
+</head>
+<body>
+
+<main id="panel">
+  <div class="stripe" id="stripe"></div>
+  <div class="statusbar">
+    <div class="status-left">
+      <span class="dot" id="liveDot"></span>
+      <span id="statusText">connecting…</span>
+    </div>
+    <span class="clock" id="clock">--:--:--</span>
+  </div>
+
+  <div class="reading">
+    <div class="label">Candidate</div>
+    <div class="candidate" id="candidateName">—</div>
+    <div class="temp" id="tempValue">--.-<span class="unit">°C</span></div>
+    <div class="meta" id="lastUpdated">Waiting for first reading…</div>
+  </div>
+
+  <div class="log">
+    <div class="log-header">Recent readings</div>
+    <ul id="logList"><li class="empty">No readings yet</li></ul>
+  </div>
+</main>
+
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<script>
+  // -------------------- CONFIG: edit these for your setup --------------------
+  // Your MQTT broker needs a WebSocket listener enabled (Mosquitto does not
+  // expose one by default). Add to mosquitto.conf:
+  //   listener 9001
+  //   protocol websockets
+  // then restart mosquitto. Use ws:// for plain, wss:// if you've put it
+  // behind TLS (required if this page is served over https).
+  const MQTT_WS_URL = 'ws://broker.benax.rw:9001';
+  const MQTT_TOPIC = 'exam/temperature/+';   // matches the PC publisher's topic prefix
+  const MQTT_USERNAME = '';                    // leave blank if the broker has no auth
+  const MQTT_PASSWORD = '';
+  const FEVER_THRESHOLD_C = 37.5;
+  const MAX_LOG_ROWS = 6;
+  // -----------------------------------------------------------------------------
+
+  const els = {
+    panel: document.getElementById('panel'),
+    stripe: document.getElementById('stripe'),
+    liveDot: document.getElementById('liveDot'),
+    statusText: document.getElementById('statusText'),
+    clock: document.getElementById('clock'),
+    candidateName: document.getElementById('candidateName'),
+    tempValue: document.getElementById('tempValue'),
+    lastUpdated: document.getElementById('lastUpdated'),
+    logList: document.getElementById('logList'),
+  };
+
+  let lastReadingAt = null;
+
+  function fmtClock(date) {
+    return date.toLocaleTimeString([], { hour12: false });
+  }
+
+  function tick() {
+    els.clock.textContent = fmtClock(new Date());
+    if (lastReadingAt) {
+      const secs = Math.round((Date.now() - lastReadingAt) / 1000);
+      els.lastUpdated.textContent = secs < 2 ? 'updated just now' : `updated ${secs}s ago`;
+    }
+  }
+  setInterval(tick, 1000);
+  tick();
+
+  function setConnectionState(connected) {
+    els.liveDot.classList.toggle('on', connected);
+    els.statusText.textContent = connected ? 'live' : 'reconnecting…';
+  }
+
+
+  function applyAccent(temperature) {
+    const alert = temperature >= FEVER_THRESHOLD_C;
+    els.panel.style.setProperty('--accent', alert ? 'var(--alert)' : 'var(--normal)');
+    return alert;
+  }
+
+  function addLogRow(candidate, temperature, alert, time) {
+    if (els.logList.querySelector('.empty')) {
+      els.logList.innerHTML = '';
+    }
+    const li = document.createElement('li');
+
+    const dot = document.createElement('span');
+    dot.className = 'row-dot' + (alert ? ' alert' : '');
+
+    const name = document.createElement('span');
+    name.className = 'row-name';
+    name.textContent = candidate;
+
+    const temp = document.createElement('span');
+    temp.className = 'row-temp';
+    temp.textContent = `${temperature.toFixed(1)}°C`;
+
+    const t = document.createElement('span');
+    t.className = 'row-time';
+    t.textContent = time;
+
+    li.append(dot, name, temp, t);
+    els.logList.prepend(li);
+    while (els.logList.children.length > MAX_LOG_ROWS) {
+      els.logList.removeChild(els.logList.lastChild);
+    }
+  }
+
+  function handleReading(data) {
+    const candidate = String(data.candidate);
+    const temperature = Number(data.temperature);
+    if (!candidate || Number.isNaN(temperature)) return;
+
+    const alert = applyAccent(temperature);
+
+    els.candidateName.textContent = candidate;
+    els.candidateName.title = candidate;
+    els.tempValue.innerHTML = `${temperature.toFixed(1)}<span class="unit">°C</span>`;
+
+    lastReadingAt = Date.now();
+    tick();
+
+    addLogRow(candidate, temperature, alert, fmtClock(new Date()));
+  }
+
+  const client = mqtt.connect(MQTT_WS_URL, {
+    username: MQTT_USERNAME || undefined,
+    password: MQTT_PASSWORD || undefined,
+    reconnectPeriod: 2000,
+  });
+
+  client.on('connect', () => {
+    setConnectionState(true);
+    client.subscribe(MQTT_TOPIC);
+  });
+  client.on('reconnect', () => setConnectionState(false));
+  client.on('close', () => setConnectionState(false));
+  client.on('error', () => setConnectionState(false));
+
+  client.on('message', (_topic, payload) => {
+    try {
+      const data = JSON.parse(payload.toString());
+      handleReading(data);
+    } catch (e) {
+      console.warn('Could not parse MQTT payload:', e);
+    }
+  });
+</script>
+
+</body>
+</html>
